@@ -106,14 +106,11 @@ GITHUB_LISTING_SOURCES = [
         "path": ".github/scripts/listings.json",
     },
 ]
-# Category labels in listings.json that count as "software" for
-# SOFTWARE_ROLES_ONLY -- the repo's taxonomy drifted over time ("Software"
-# is current, "Software Engineering" is an older/inconsistent label still
-# used by some entries), so both are accepted. Entries in any other
-# category still count if their title passes SOFTWARE_ROLE_RE: Simplify
-# files plenty of plain "Software Engineer Intern" roles under Hardware or
-# AI/ML/Data.
-GITHUB_SOFTWARE_CATEGORIES = {"software", "software engineering"}
+# Simplify's taxonomy is tech-only (Software, AI/ML/Data, Hardware,
+# Product, Quant) with no finance/business category, so for
+# ECON_ROLES_ONLY its entries are gated on title alone (ECON_ROLE_RE):
+# "Financial Analyst Intern" or "Banking Policy and Economic Research
+# Intern" still turn up there, filed under AI/ML/Data or Quant.
 # Skip a listing-feed posting when it links to a board we already poll
 # directly and our own title filters would have notified it from there --
 # otherwise the same job pings twice (once per lane). Postings our title
@@ -122,12 +119,12 @@ GITHUB_SOFTWARE_CATEGORIES = {"software", "software engineering"}
 GITHUB_SKIP_DIRECT_COVERED = os.environ.get("GITHUB_SKIP_DIRECT_COVERED", "true").strip().lower() != "false"
 
 # --- Filtering -------------------------------------------------------------
-# Only notify about internships/co-ops, in software/full-stack-ish roles,
-# in the US, and only ones that still look freshly posted. Set
-# INTERNSHIPS_ONLY=false, SOFTWARE_ROLES_ONLY=false, or US_ONLY=false in
-# the environment to loosen a filter.
+# Only notify about internships/co-ops, in finance/economics/business
+# roles, in the US, and only ones that still look freshly posted. Set
+# INTERNSHIPS_ONLY=false, ECON_ROLES_ONLY=false, or US_ONLY=false in the
+# environment to loosen a filter.
 INTERNSHIPS_ONLY = os.environ.get("INTERNSHIPS_ONLY", "true").strip().lower() != "false"
-SOFTWARE_ROLES_ONLY = os.environ.get("SOFTWARE_ROLES_ONLY", "true").strip().lower() != "false"
+ECON_ROLES_ONLY = os.environ.get("ECON_ROLES_ONLY", "true").strip().lower() != "false"
 # Drop postings whose location is clearly outside the US (e.g. Sydney,
 # Australia). Remote / unspecified locations still pass — most ATS boards
 # in this list are US companies that omit a country. Set US_ONLY=false to
@@ -144,13 +141,16 @@ SMARTRECRUITERS_QUERY = os.environ.get("SMARTRECRUITERS_QUERY", "intern" if INTE
 
 # Word-boundary matched so "International", "cooperation", etc. don't
 # false-positive. Co-ops are explicitly included here (matches "co-op",
-# "co-ops", "coop", "coops"), as are apprenticeships, student roles, and
-# "Summer 2027"-style titles that never say "intern".
+# "co-ops", "coop", "coops"), as are apprenticeships, student roles,
+# "Summer 2027"-style titles that never say "intern", and the banking
+# naming convention ("2027 Summer Analyst - Investment Banking",
+# "Off-Cycle Analyst").
 INTERNSHIP_RE = re.compile(
     r"\b("
     r"intern|interns|internship|internships|co-?ops?|"
     r"apprentice(?:ship)?s?|student|undergrad(?:uate)?|"
-    r"summer\s+20\d\d"
+    r"summer\s+20\d\d|20\d\d\s+summer|"
+    r"summer\s+(?:analyst|associate|scholar)s?|off[\s-]cycle"
     r")\b",
     re.IGNORECASE,
 )
@@ -161,29 +161,44 @@ NOT_INTERN_ROLE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Title must also look software/full-stack-related, so e.g. "Marketing
-# Intern" or "Sales Development Co-op" don't slip through just because they
-# matched INTERNSHIP_RE. Deliberately an allow-list of software-engineering
-# terms rather than a bare "engineer" match, since that would also catch
-# mechanical/electrical/civil engineering internships. Measured against
-# Simplify's hand-labeled listings, a bare "Engineering Intern" title was
-# about as likely to be hardware as software, so it isn't matched; neither
-# are "systems engineer" / "test engineer" on their own (mostly hardware
-# roles) -- "Software Systems/Test Engineer" still match via "software".
-SOFTWARE_ROLE_RE = re.compile(
+# Title must also look finance/economics/business-related, so e.g.
+# "Software Engineer Intern" or "Nursing Co-op" don't slip through just
+# because they matched INTERNSHIP_RE. Covers banking (IB, S&T, capital
+# markets, M&A), investing (PE, VC, asset/wealth management, equity
+# research), corporate finance (FP&A, treasury, corporate development,
+# strategy), consulting (management, economic, transaction advisory),
+# accounting (audit, tax, forensic), research/analytics (market research,
+# economics, data/business analyst) and business ops / BD.
+ECON_ROLE_RE = re.compile(
     r"\b("
-    r"software|swe|sde|"
-    r"full[\s-]?stack|front[\s-]?end|back[\s-]?end|"
-    r"web\s?dev(?:eloper|elopment)?s?|application\s+develop\w*|"
-    r"(?<!business\s)(?<!estate\s)developers?|"
-    r"devops|dev\s?ops|site\s+reliability|sre|"
-    r"mobile|ios|android|"
-    r"(?:machine\s+learning|ml|ai|ai/ml|ml/ai|llm|gen\s?ai)\s+(?:engineer\w*|developer|software)|"
-    r"data\s+engineer\w*|platform\s+engineer\w*|infrastructure\s+engineer\w*|cloud\s+engineer\w*|"
-    r"security\s+engineer\w*|qa\s+engineer\w*|"
-    r"computer\s+science|programmer|programming|"
-    r"forward[\s-]deployed|compilers?|kernel|distributed\s+systems|"
-    r"(?<!information\s)tech(?:nology)?\s+(?:intern\w*|co-?op|analyst|summer)"
+    r"financ\w*|fp\s?&\s?a|fp\s?and\s?a|"
+    r"bank(?:ing|ers?)|ibd?|investments?|investor\s+relations|"
+    r"private\s+(?:equity|credit|markets|wealth)|venture\s+capital|growth\s+equity|"
+    r"equity\s+research|capital\s+markets|markets|m\s?&\s?a|mergers|"
+    r"restructuring|valuations?|leveraged|underwrit\w*|credit|"
+    r"asset\s+management|wealth\s+management|portfolio|fixed\s+income|"
+    r"sales\s+(?:&|and)\s+trading|trad(?:ing|ers?)|treasury|risk|"
+    r"accounting|accountants?|audit\w*|assurance|forensic|tax|actuar\w*|"
+    r"econ\w*|"
+    r"consult\w*|advisory|strategy|strategic|corporate\s+development|corp\s?dev|"
+    r"transaction\s+services|"
+    r"market\s+(?:research|intelligence)|research\s+analyst|consumer\s+insights|"
+    r"competitive\s+intelligence|"
+    r"business\s+(?:development|operations|analyst|analytics|intelligence|strategy)|"
+    r"biz\s?ops|bizdev|strategy\s+(?:&|and)\s+operations|"
+    r"data\s+analyst|analytics|pricing|real\s+estate|acquisitions|policy"
+    r")\b",
+    re.IGNORECASE,
+)
+# Tech/engineering/clinical titles that happen to contain one of the terms
+# above ("Software Engineer Intern - Investment Banking Technology",
+# "Risk Data Scientist Co-op", "Clinical Research Analyst Intern").
+NOT_ECON_ROLE_RE = re.compile(
+    r"\b("
+    r"software|swe|sde|developers?|engineer\w*|programm\w*|devops|"
+    r"full[\s-]?stack|front[\s-]?end|back[\s-]?end|machine\s+learning|"
+    r"data\s+scien\w*|hardware|firmware|cyber\w*|"
+    r"electrical|mechanical|chemical|civil|nurs\w*|clinical"
     r")\b",
     re.IGNORECASE,
 )
@@ -266,15 +281,15 @@ def _job_is_us(job):
     return False
 
 
-def _is_software_title(title):
-    return bool(SOFTWARE_ROLE_RE.search(title))
+def _is_econ_title(title):
+    return bool(ECON_ROLE_RE.search(title)) and not NOT_ECON_ROLE_RE.search(title)
 
 
 def _title_passes_filters(title):
     """The title-based half of the filters for direct ATS postings."""
     if INTERNSHIPS_ONLY and (not INTERNSHIP_RE.search(title) or NOT_INTERN_ROLE_RE.search(title)):
         return False
-    return not SOFTWARE_ROLES_ONLY or _is_software_title(title)
+    return not ECON_ROLES_ONLY or _is_econ_title(title)
 
 
 def _job_passes_filters(job):
@@ -803,8 +818,7 @@ async def fetch_github_listing_source(client, source, covered_boards=frozenset()
         title = item.get("title")
         if not (job_id and job_url and company and title):
             continue
-        category = (item.get("category") or "").strip().lower()
-        if SOFTWARE_ROLES_ONLY and category not in GITHUB_SOFTWARE_CATEGORIES and not _is_software_title(title):
+        if ECON_ROLES_ONLY and not _is_econ_title(title):
             continue
         posted_at = _parse_epoch_seconds(item.get("date_posted"))
         site_list = [loc for loc in item.get("locations") or [] if isinstance(loc, str)]
@@ -830,10 +844,10 @@ async def fetch_github_listing_source(client, source, covered_boards=frozenset()
             "source": source["label"],
             # Every entry in this feed is already an internship/co-op by
             # definition (that's the whole repo), and we already gated on
-            # `category` above for SOFTWARE_ROLES_ONLY -- re-running
-            # INTERNSHIP_RE/SOFTWARE_ROLE_RE against the title would only
-            # produce false negatives (e.g. "Software Engineer, Summer
-            # 2027" has no literal "intern" in it) with no benefit.
+            # ECON_ROLE_RE above for ECON_ROLES_ONLY -- re-running
+            # INTERNSHIP_RE against the title would only produce false
+            # negatives (e.g. "Fall 2027 Finance Analyst" has no
+            # literal "intern" in it) with no benefit.
             "skip_title_filters": True,
             "direct_covered": _direct_board_key(job_url) in covered_boards,
         }
@@ -1019,13 +1033,13 @@ def main():
         print(
             f"{total_new_all} existing postings found while seeding "
             f"({would_match_first_run} would have matched filters -- "
-            f"internships_only={INTERNSHIPS_ONLY}, software_roles_only={SOFTWARE_ROLES_ONLY}, "
+            f"internships_only={INTERNSHIPS_ONLY}, econ_roles_only={ECON_ROLES_ONLY}, "
             f"us_only={US_ONLY})."
         )
     else:
         print(
             f"{total_new_all} new postings found; {total_new} matched filters "
-            f"(internships_only={INTERNSHIPS_ONLY}, software_roles_only={SOFTWARE_ROLES_ONLY}, "
+            f"(internships_only={INTERNSHIPS_ONLY}, econ_roles_only={ECON_ROLES_ONLY}, "
             f"us_only={US_ONLY}) "
             f"across {len(new_by_company)} companies."
         )

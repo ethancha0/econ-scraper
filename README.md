@@ -4,7 +4,9 @@ Polls ~18,000 companies' career sites directly across five ATS platforms
 (Workday, Greenhouse, Lever, Ashby, SmartRecruiters), plus community-curated
 GitHub listing repos (SimplifyJobs' internship list) as a cross-check —
 skipping LinkedIn entirely — and pings a Discord channel the moment a new
-posting appears.
+posting appears. The title filters are tuned for **economics / finance /
+business internships** (banking, consulting, FP&A, PE, economic
+consulting, accounting, market research, BD/BizOps, etc.).
 
 ## How it works
 
@@ -42,22 +44,36 @@ posting appears.
 Three filters apply, all on by default:
 
 - **`INTERNSHIPS_ONLY=true`** — only postings with "intern," "internship,"
-  "co-op," "apprentice," "student," "undergraduate," or "Summer 20XX" in
-  the title (word-boundary matched, so "International" or "Cooperative"
-  won't false-positive). Titles that mention interns without being one
+  "co-op," "apprentice," "student," "undergraduate," "Summer 20XX," or the
+  banking-style "Summer Analyst / Summer Associate / Off-Cycle" in the
+  title (word-boundary matched, so "International" or "Cooperative" won't
+  false-positive). Titles that mention interns without being one
   ("Intern Program Manager," "Senior …," "University Recruiter") are
   dropped.
-- **`SOFTWARE_ROLES_ONLY=true`** — the title must *also* look
-  software/full-stack-related: "software," "developer," "full-stack,"
-  "front-end," "back-end," "DevOps," "SRE," "mobile/iOS/Android," "data
-  engineer," "ML/AI engineer," "forward deployed," "compiler," "computer
-  science," "technology intern," etc. This is an allow-list (not a bare
-  "engineer" match — that would also catch mechanical/electrical/civil
-  engineering internships), so it filters out things like "Marketing
-  Intern" or "Sales Co-op" that only matched on the internship keyword.
-  Against Simplify's hand-labeled listings, it matches ~79% of active
-  "Software" internships, and bare "Systems/Test Engineering Intern" titles
-  (mostly hardware) no longer match.
+- **`ECON_ROLES_ONLY=true`** — the title must *also* look
+  finance/economics/business-related (`ECON_ROLE_RE` in `poll.py`):
+  - banking & markets — "investment banking," "banker," "IBD," "capital
+    markets," "M&A," "restructuring," "sales & trading," "trading,"
+    "credit," "underwriting," "valuation"
+  - investing — "private equity," "venture capital," "asset / wealth
+    management," "equity research," "portfolio," "fixed income,"
+    "investments," "investor relations," "real estate," "acquisitions"
+  - corporate finance & strategy — "finance/financial," "FP&A,"
+    "treasury," "risk," "pricing," "strategy," "corporate development"
+  - consulting — "consulting/consultant," "advisory," "economic(s),"
+    "transaction services," "policy"
+  - accounting — "accounting," "audit," "assurance," "tax," "forensic,"
+    "actuarial"
+  - research & ops — "market research," "consumer insights," "research
+    analyst," "business development / operations / analyst / analytics /
+    intelligence," "BizOps," "strategy & operations," "data analyst,"
+    "analytics"
+
+  Titles that also contain a tech/engineering/clinical term ("software,"
+  "developer," "engineer," "data scientist," "machine learning," "cyber,"
+  "clinical," …) are dropped (`NOT_ECON_ROLE_RE`), so "Software Engineer
+  Intern – Investment Banking Technology" doesn't slip through on
+  "banking." To widen or narrow the net, edit those two regexes.
 - **`US_ONLY=true`** — drop postings with no US location. Where the ATS
   gives a structured country (SmartRecruiters, Lever, Ashby), that decides
   it; otherwise the location text is checked against non-US countries,
@@ -67,16 +83,16 @@ Three filters apply, all on by default:
   checked and passes. This filter applies to GitHub listing sources too.
 
 Set any of these to `false` in the workflow's `env:` block to loosen it —
-e.g. `SOFTWARE_ROLES_ONLY=false` to see all internships/co-ops regardless
-of department, `INTERNSHIPS_ONLY=false` to see every software role
+e.g. `ECON_ROLES_ONLY=false` to see all internships/co-ops regardless
+of department, `INTERNSHIPS_ONLY=false` to see every finance/econ role
 including full-time, or `US_ONLY=false` to include jobs outside the US.
 
 GitHub listing sources ([below](#github-listing-sources)) skip the
 internship regex — every entry there is already an internship/co-op by
-definition of the feed. `SOFTWARE_ROLES_ONLY` still applies: an entry
-counts if its `category` is Software, *or* its title passes the software
-regex (Simplify files plenty of "Software Engineer Intern" roles under
-Hardware or AI/ML/Data).
+definition of the feed. `ECON_ROLES_ONLY` still applies, on the title
+alone: Simplify's categories are tech-only (Software, AI/ML/Data,
+Hardware, Product, Quant), but plenty of finance/analytics internships are
+filed under AI/ML/Data or Quant, and those still come through.
 
 Recency comes from two layers:
 - **Primary**: a posting only counts as "new" if its ID wasn't in that ATS
@@ -188,8 +204,8 @@ their own scraper, and published as a machine-readable `listings.json`
 ~13 MB) and treats each entry's `company_name` like any other company:
 dedup by the entry's stable `id`, same Discord notification, same state
 file (`seen_github.json`). Filtering there works a little differently, see
-[Filtering](#filtering) above — no internship regex, and `category` (or a
-software-looking title) does the software-role gating.
+[Filtering](#filtering) above — no internship regex, just the
+finance/econ title regex.
 
 Many feed entries link straight to a Greenhouse/Lever/Ashby/
 SmartRecruiters/Workday board that's already in `data/companies.csv`. When
